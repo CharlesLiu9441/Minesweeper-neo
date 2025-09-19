@@ -232,8 +232,8 @@ impl eframe::App for MinesweeperApp {
                     }
                     ui.separator();
                     ui.label("Custom settings:");
-                    ui.add(egui::Slider::new(&mut self.temp_config.width, 5..=50).text("Width"));
-                    ui.add(egui::Slider::new(&mut self.temp_config.height, 5..=50).text("Height"));
+                    ui.add(egui::Slider::new(&mut self.temp_config.width, 6..=50).text("Width"));
+                    ui.add(egui::Slider::new(&mut self.temp_config.height, 6..=50).text("Height"));
                     ui.add(egui::Slider::new(&mut self.temp_config.mine_count, 1..=(self.temp_config.width * self.temp_config.height-9)).text("Mines"));
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
