@@ -53,7 +53,3 @@ jobs:
         name: binary-${{ matrix.os }}
         path: target/release/
 
-    - name: Show build info
-      run: |
-        echo "Build completed on ${{ matrix.os }}"
-        ls -la target/release/
