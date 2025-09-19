@@ -39,13 +39,25 @@ jobs:
     - name: Build release
       run: cargo build --verbose --release
 
+    # 提取二进制文件名（去除扩展名）
+    - name: Extract binary name
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          echo "BINARY_NAME=${CARGO_PKG_NAME:-$(basename $GITHUB_REPOSITORY)}.exe" >> $GITHUB_ENV
+        else
+          echo "BINARY_NAME=${CARGO_PKG_NAME:-$(basename $GITHUB_REPOSITORY)}" >> $GITHUB_ENV
+        fi
+      env:
+        CARGO_PKG_NAME: $(cargo pkgid 2>/dev/null | cut -d# -f2 | cut -d: -f1 || echo "")
+
     - name: Upload artifacts (Windows)
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
         name: binary-windows
         path: target/release/*.exe
-
+  
     - name: Upload artifacts (Unix)
       if: matrix.os != 'windows-latest'
       uses: actions/upload-artifact@v4
@@ -53,3 +65,107 @@ jobs:
         name: binary-${{ matrix.os }}
         path: target/release/
 
+    # 新增：专门为 macOS 创建 DMG 包
+    - name: Create DMG package (macOS only)
+      if: matrix.os == 'macos-latest'
+      run: |
+        # 安装 create-dmg
+        brew install create-dmg
+
+        # 准备应用程序包结构
+        mkdir -p "$APP_NAME.app/Contents/MacOS"
+        mkdir -p "$APP_NAME.app/Contents/Resources"
+
+        # 复制二进制文件
+        cp "target/release/$BINARY_NAME" "$APP_NAME.app/Contents/MacOS/$APP_NAME"
+        chmod +x "$APP_NAME.app/Contents/MacOS/$APP_NAME"
+
+        # 创建基本的 Info.plist 文件
+        cat > "$APP_NAME.app/Contents/Info.plist" << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>$APP_NAME</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.github.$REPO_OWNER.$APP_NAME</string>
+            <key>CFBundleName</key>
+            <string>$APP_NAME</string>
+            <key>CFBundleVersion</key>
+            <string>$GITHUB_SHA</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.15</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+        </dict>
+        </plist>
+        EOF
+
+        # 尝试复制图标（如果有），否则使用默认图标
+        if [ -f "assets/icon.icns" ]; then
+          cp "assets/icon.icns" "$APP_NAME.app/Contents/Resources/"
+          ICON_OPTIONS="--volicon assets/icon.icns"
+        else
+          # 如果没有图标文件，尝试使用系统默认图标或跳过
+          echo "No custom icon found, using default"
+          ICON_OPTIONS=""
+        fi
+
+        # 使用 create-dmg 创建安装包
+        create-dmg $ICON_OPTIONS \
+          --volname "$APP_NAME Installer" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "$APP_NAME.app" 200 190 \
+          --hide-extension "$APP_NAME.app" \
+          --app-drop-link 600 190 \
+          --no-internet-enable \
+          "$DMG_NAME" \
+          "$APP_NAME.app/"
+
+        # 检查 DMG 是否创建成功
+        if [ -f "$DMG_NAME" ]; then
+          echo "DMG created successfully: $DMG_NAME"
+          ls -la "$DMG_NAME"
+        else
+          echo "Failed to create DMG"
+          exit 1
+        fi
+      env:
+        APP_NAME: ${CARGO_PKG_NAME:-$(basename "$GITHUB_REPOSITORY")}
+        REPO_OWNER: $(echo "$GITHUB_REPOSITORY" | cut -d/ -f1)
+        DMG_NAME: ${{ env.APP_NAME }}-${{ github.sha }}.dmg
+
+    # 新增：上传 DMG 包作为独立构件
+    - name: Upload DMG artifact
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.APP_NAME }}-macos-installer
+        path: ${{ env.DMG_NAME }}
+
+  # 新增：创建发布版本的独立工作（可选）
+  create-release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+        
+    - name: Display structure of downloaded files
+      run: ls -R
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/**/*
