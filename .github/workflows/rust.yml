@@ -45,7 +45,7 @@ jobs:
       with:
         name: binary-windows
         path: target/release/*.exe
-
+  
     - name: Upload artifacts (Unix)
       if: matrix.os != 'windows-latest'
       uses: actions/upload-artifact@v4
@@ -53,7 +53,3 @@ jobs:
         name: binary-${{ matrix.os }}
         path: target/release/
 
-    - name: Show build info
-      run: |
-        echo "Build completed on ${{ matrix.os }}"
-        ls -la target/release/
