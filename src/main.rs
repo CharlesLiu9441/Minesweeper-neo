@@ -137,7 +137,11 @@ impl Minesweeper {
     }
     fn check_win_condition(&mut self) {
         let all_non_mines_revealed = !self.first_click&&self.grid.iter().flatten().all(|cell|
-            cell.state != CellState::Hidden||cell.is_mine
+            if cell.is_mine {
+                cell.state != CellState::Revealed
+            } else {
+                cell.state == CellState::Revealed
+            }
         );
 
         let all_mines_flagged = self.grid.iter().flatten().all(|cell|
